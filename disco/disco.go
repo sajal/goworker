@@ -173,7 +173,7 @@ func (disco *Disco) http_reader(address string) (io.ReadCloser, error) {
 		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, errors.New(fmt.Sprintf("bad response: %d", resp.Status))
+		return nil, errors.New(fmt.Sprintf("bad response: %s", resp.Status))
 	}
 	return resp.Body, nil
 }
