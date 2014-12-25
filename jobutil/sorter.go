@@ -4,6 +4,7 @@ import (
 	"bufio"
 	//"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -12,10 +13,11 @@ import (
 func put_raw_data_in_file(input io.Reader) string {
 	pwd, err := os.Getwd()
 	Check(err)
-	name := pwd + "/sorted_inputs"
-	sortfile, err := os.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
+	sortfile, err := ioutil.TempFile(pwd, "sorted_inputs_") //pwd + "/sorted_inputs"
+	//sortfile, err := os.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	defer sortfile.Close()
 	Check(err)
+	name := sortfile.Name()
 	// TODO take care of the size
 	_, err = io.Copy(sortfile, input)
 	Check(err)

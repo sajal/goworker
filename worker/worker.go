@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/discoproject/goworker/jobutil"
+	"hash/fnv"
 	"io"
 	"io/ioutil"
 	"log"
@@ -180,33 +181,64 @@ type Worker struct {
 	outputs []*Output
 }
 
-type Process func(io.Reader, io.Writer)
+type Process func(io.Reader, chan KV)
 
-func (w *Worker) runStage(pwd string, prefix string, process Process) {
-	output, err := ioutil.TempFile(pwd, prefix)
-	output_name := output.Name()
-	Check(err)
-	defer output.Close()
+type KV struct {
+	Key   string
+	Value []byte
+}
+
+func hash(s string, n int) uint32 {
+	h := fnv.New32a()
+	h.Write([]byte(s))
+	return h.Sum32() % uint32(n)
+}
+
+func (w *Worker) runStage(pwd string, prefix string, process Process, numoutput int) {
+	outputs := make([]*os.File, numoutput)
+	output_names := make([]string, numoutput)
+	var err error
+	for i := 0; i < numoutput; i++ {
+		outputs[i], err = ioutil.TempFile(pwd, prefix)
+		output_names[i] = outputs[i].Name()
+		Check(err)
+		defer outputs[i].Close()
+	}
+
+	//output, err := ioutil.TempFile(pwd, prefix)
+	//output_name := output.Name()
+	//Check(err)
+
 	locations := make([]string, len(w.inputs))
 	for i, input := range w.inputs {
 		locations[i] = input.replica_location
 	}
 
 	readCloser := jobutil.AddressReader(locations, jobutil.Setting("DISCO_DATA"))
-	process(readCloser, output)
+	chanout := make(chan KV, 10)
+
+	go process(readCloser, chanout)
+	for item := range chanout {
+		h := 0
+		if numoutput != 1 {
+			h = int(hash(item.Key, numoutput))
+		}
+		fmt.Fprintf(outputs[h], "%s\t%s\n", item.Key, item.Value)
+	}
 	readCloser.Close()
 
-	fileinfo, err := output.Stat()
-	Check(err)
-
-	w.outputs = make([]*Output, 1)
-	w.outputs[0] = new(Output)
-
+	w.outputs = make([]*Output, numoutput)
 	absDiscoPath, err := filepath.EvalSymlinks(w.task.Disco_data)
 	Check(err)
-	w.outputs[0].output_location =
-		"disco://" + jobutil.Setting("HOST") + "/disco/" + output_name[len(absDiscoPath)+1:]
-	w.outputs[0].output_size = fileinfo.Size()
+	for i := 0; i < numoutput; i++ {
+		fileinfo, err := outputs[i].Stat()
+		Check(err)
+		w.outputs[i] = new(Output)
+		w.outputs[i].output_location =
+			"disco://" + jobutil.Setting("HOST") + "/disco/" + output_names[i][len(absDiscoPath)+1:]
+		w.outputs[i].output_size = fileinfo.Size()
+		w.outputs[i].label = i
+	}
 }
 
 func Run(Map Process, Reduce Process) {
@@ -231,7 +263,7 @@ func Run(Map Process, Reduce Process) {
 	Check(err)
 
 	if w.task.Stage == "map" {
-		w.runStage(pwd, "map_out_", Map)
+		w.runStage(pwd, "map_out_", Map, 5)
 	} else if w.task.Stage == "map_shuffle" {
 		w.outputs = make([]*Output, len(w.inputs))
 		for i, input := range w.inputs {
@@ -241,7 +273,7 @@ func Run(Map Process, Reduce Process) {
 			w.outputs[i].output_size = 0 // TODO find a way to calculate the size
 		}
 	} else {
-		w.runStage(pwd, "reduce_out_", Reduce)
+		w.runStage(pwd, "reduce_out_", Reduce, 1)
 	}
 
 	send_output(w.outputs)

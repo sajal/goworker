@@ -52,7 +52,7 @@ func decode_response(input []byte) (status string, results []string) {
 
 func get_results(c chan []string, errChan chan error, myurl string, reqBody []byte) {
 	var client *http.Client
-	
+
 	proxy := Setting("DISCO_PROXY")
 	if proxy != "" {
 		proxyUrl, err := url.Parse(proxy)

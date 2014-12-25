@@ -129,7 +129,7 @@ func (job *Job) GetJobPack(jobtype string) (*JobPack, error) {
 	jp.AddToJobDict("scheduler", make(map[string]string))
 	jp.AddToJobDict("save_info", "ddfs")
 	jp.AddToJobDict("worker", "./job")
-	jp.AddToJobDict("nr_reduces", 1)
+	jp.AddToJobDict("nr_reduces", 2)
 	jp.AddToJobDict("save_results", false)
 	jp.AddToJobDict("input", getEffectiveInputs(job.Inputs))
 

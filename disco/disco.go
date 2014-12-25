@@ -19,7 +19,7 @@
 //Wait for results. In this case 1 minute is the maximum we are
 //willing to wait for job to complete. Use nil to wait forever.
 //	results, err := d.Wait(jr, time.Minute)
-//Fetch a reader to read the actual results. 
+//Fetch a reader to read the actual results.
 //This returns an io.ReadCloser, parse as you wish...
 //	rdr, err := d.Reader(results)
 package disco
