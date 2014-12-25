@@ -48,7 +48,7 @@ func recv() (string, int, []byte) {
 	fmt.Scanf("%s %d", &status, &size)
 	reader := bufio.NewReader(os.Stdin)
 	input := make([]byte, size)
-	reader.Read(input)
+	io.ReadFull(reader, input)
 	debug("recv", fmt.Sprintf("%d ", size)+string(input))
 	return status, size, input
 }
@@ -186,6 +186,7 @@ type Process func(io.Reader, chan KV)
 type KV struct {
 	Key   string
 	Value []byte
+	Label int
 }
 
 func hash(s string, n int) uint32 {
@@ -194,16 +195,15 @@ func hash(s string, n int) uint32 {
 	return h.Sum32() % uint32(n)
 }
 
-func (w *Worker) runStage(pwd string, prefix string, process Process, numoutput int) {
-	outputs := make([]*os.File, numoutput)
-	output_names := make([]string, numoutput)
+func (w *Worker) runStage(pwd string, prefix string, process Process) {
+	outputs := make(map[int]*os.File)
 	var err error
-	for i := 0; i < numoutput; i++ {
-		outputs[i], err = ioutil.TempFile(pwd, prefix)
-		output_names[i] = outputs[i].Name()
-		Check(err)
-		defer outputs[i].Close()
-	}
+	//	for i := 0; i < numoutput; i++ {
+	//		outputs[i], err = ioutil.TempFile(pwd, prefix)
+	//		output_names[i] = outputs[i].Name()
+	//		Check(err)
+	//		defer outputs[i].Close()
+	//	}
 
 	//output, err := ioutil.TempFile(pwd, prefix)
 	//output_name := output.Name()
@@ -219,25 +219,29 @@ func (w *Worker) runStage(pwd string, prefix string, process Process, numoutput 
 
 	go process(readCloser, chanout)
 	for item := range chanout {
-		h := 0
-		if numoutput != 1 {
-			h = int(hash(item.Key, numoutput))
+		_, ok := outputs[item.Label]
+		if !ok {
+			outputs[item.Label], err = ioutil.TempFile(pwd, prefix)
+			Check(err)
+			defer outputs[item.Label].Close()
 		}
-		fmt.Fprintf(outputs[h], "%s\t%s\n", item.Key, item.Value)
+		fmt.Fprintf(outputs[item.Label], "%s\t%s\n", item.Key, item.Value)
 	}
 	readCloser.Close()
 
-	w.outputs = make([]*Output, numoutput)
+	w.outputs = make([]*Output, len(outputs))
 	absDiscoPath, err := filepath.EvalSymlinks(w.task.Disco_data)
 	Check(err)
-	for i := 0; i < numoutput; i++ {
-		fileinfo, err := outputs[i].Stat()
+	i := 0
+	for label, output := range outputs {
+		fileinfo, err := output.Stat()
 		Check(err)
 		w.outputs[i] = new(Output)
 		w.outputs[i].output_location =
-			"disco://" + jobutil.Setting("HOST") + "/disco/" + output_names[i][len(absDiscoPath)+1:]
+			"disco://" + jobutil.Setting("HOST") + "/disco/" + output.Name()[len(absDiscoPath)+1:]
 		w.outputs[i].output_size = fileinfo.Size()
-		w.outputs[i].label = i
+		w.outputs[i].label = label
+		i++
 	}
 }
 
@@ -263,7 +267,7 @@ func Run(Map Process, Reduce Process) {
 	Check(err)
 
 	if w.task.Stage == "map" {
-		w.runStage(pwd, "map_out_", Map, 5)
+		w.runStage(pwd, "map_out_", Map)
 	} else if w.task.Stage == "map_shuffle" {
 		w.outputs = make([]*Output, len(w.inputs))
 		for i, input := range w.inputs {
@@ -273,7 +277,7 @@ func Run(Map Process, Reduce Process) {
 			w.outputs[i].output_size = 0 // TODO find a way to calculate the size
 		}
 	} else {
-		w.runStage(pwd, "reduce_out_", Reduce, 1)
+		w.runStage(pwd, "reduce_out_", Reduce)
 	}
 
 	send_output(w.outputs)
