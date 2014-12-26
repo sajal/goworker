@@ -2,6 +2,7 @@ package disco
 
 import (
 	"bufio"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"github.com/discoproject/goworker/jobutil"
@@ -36,7 +37,13 @@ func (worker *DiscoWorker) Run() {
 	w.discoworker = worker
 	send_worker()
 	w.task = request_task()
-
+	job_dict := w.task.ExtractJobDict()
+	params, ok := job_dict["params"]
+	debug("params", params)
+	if ok {
+		//We have some data in params...
+		w.params = params.(map[string]interface{})
+	}
 	jobutil.SetKeyValue("HOST", w.task.Host)
 	master, port := jobutil.HostAndPort(w.task.Master)
 	jobutil.SetKeyValue("DISCO_MASTER_HOST", master)
@@ -239,6 +246,21 @@ type Output struct {
 	label           int
 	output_location string
 	output_size     int64
+}
+
+func (t *Task) ExtractJobDict() map[string]interface{} {
+	file, err := os.Open(t.Jobfile)
+	Check(err)
+	var header Header
+	err = binary.Read(file, binary.BigEndian, &header)
+	Check(err)
+	job_dict_buf := make([]byte, header.JobEnvOffset-header.JobDictOffset)
+	err = binary.Read(file, binary.BigEndian, &job_dict_buf)
+	Check(err)
+	job_dict := make(map[string]interface{})
+	err = json.Unmarshal(job_dict_buf, &job_dict)
+	Check(err)
+	return job_dict
 }
 
 func (w *Worker) runMapStage(pwd string, prefix string) {
