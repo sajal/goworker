@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/discoproject/goworker/jobutil"
 	"io"
@@ -73,7 +74,18 @@ func (worker *DiscoWorker) Run() {
 	} else if w.task.Stage == "reduce_shuffle" {
 		w.runReduceShuffleStage(pwd, "reduce_shuffle_")
 	} else {
-		w.runReduceStage(pwd, "reduce_out_")
+		if worker.Reduce == nil {
+			w.outputs = make([]*Output, len(w.inputs))
+			for i, input := range w.inputs {
+				w.outputs[i] = new(Output)
+				w.outputs[i].output_location = input.replica_location
+				w.outputs[i].label = input.label
+				w.outputs[i].output_size = 0 // TODO find a way to calculate the size
+			}
+		} else {
+			w.runReduceStage(pwd, "reduce_out_")
+
+		}
 	}
 
 	send_output(w.outputs)
@@ -317,7 +329,8 @@ func (w *Worker) runReduceShuffleStage(pwd string, prefix string) {
 
 	readCloser := jobutil.AddressReader(locations, jobutil.Setting("DISCO_DATA"))
 
-	io.Copy(output, readCloser)
+	_, err = io.Copy(output, readCloser)
+	Check(err)
 
 	readCloser.Close()
 
@@ -375,4 +388,16 @@ func (w *Worker) runReduceStage(pwd string, prefix string) {
 	w.outputs[0].output_location =
 		"disco://" + jobutil.Setting("HOST") + "/disco/" + output_name[len(absDiscoPath)+1:]
 	w.outputs[0].output_size = fileinfo.Size()
+}
+
+func GetParam(params map[string]interface{}, name string) string {
+	f, ok := params[name]
+	if !ok {
+		log.Fatal(errors.New(fmt.Sprintf("%s param missing?!?!?!?", name)))
+	}
+	fname, ok := f.(string)
+	if !ok {
+		log.Fatal(errors.New(fmt.Sprintf("%s param not string?!?!?!", name)))
+	}
+	return fname
 }
