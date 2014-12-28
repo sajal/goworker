@@ -111,8 +111,9 @@ func (disco *Disco) ProbeResult(jobname string) (*Results, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Println(string(body))
+	//log.Println(string(body))
 	status, inputs, err := decode_response(body)
+	//log.Println(status, inputs, err)
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +162,7 @@ func (disco *Disco) convert_uri(uri string) string {
 	if scheme == "disco" {
 		host, _ := getHostAndType(uri)
 		if host != disco.options.Masterhost {
-			return "http://" + locstr + ":" + disco.options.Masterport + "/" + path
+			return "http://" + locstr + ":" + "8989" + "/" + path
 		}
 	}
 	return uri
@@ -203,7 +204,7 @@ func (disco *Disco) Reader(results *Results) (io.ReadCloser, error) {
 		}
 
 	}
-	return MultiReadCloser(readers...), nil
+	return MultiReadCloser(readers), nil
 }
 
 //Makes and submits the JobPack to master.
@@ -286,10 +287,11 @@ func decode_response(input []byte) (status string, results []string, err error) 
 	if len(inter0) == 0 {
 		results = []string{""}
 	} else {
-		inter1 := inter0[0].([]interface{})
-		results = make([]string, len(inter1))
-		for i, item := range inter1 {
-			results[i] = item.(string)
+		results = make([]string, len(inter0))
+		for i, item := range inter0 {
+			it := item.([]interface{})
+			//inter1 := it[0].([]interface{})
+			results[i] = it[0].(string)
 		}
 	}
 	return

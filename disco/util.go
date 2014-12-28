@@ -20,6 +20,8 @@ func (mr *multiReader) Read(p []byte) (n int, err error) {
 				err = nil
 				//Close current reader
 				mr.readers[0].Close()
+				//Since we closed this reader, we move to next
+				mr.readers = mr.readers[1:]
 			}
 			return
 		}
@@ -40,8 +42,8 @@ func (mr *multiReader) Close() error {
 // the provided input readers.  They're read sequentially.  Once all
 // inputs have returned EOF, Read will return EOF.  If any of the readers
 // return a non-nil, non-EOF error, Read will return that error.
-func MultiReadCloser(readers ...io.ReadCloser) io.ReadCloser {
-	r := make([]io.ReadCloser, len(readers))
-	copy(r, readers)
-	return &multiReader{r}
+func MultiReadCloser(readers []io.ReadCloser) io.ReadCloser {
+	//r := make([]io.ReadCloser, len(readers))
+	//copy(r, readers)
+	return &multiReader{readers}
 }
