@@ -192,7 +192,7 @@ func (disco *Disco) Reader(results *Results) (io.ReadCloser, error) {
 		case "https":
 			rdr, err := disco.http_reader(address)
 			if err != nil {
-				return nil, err
+				return nil, errors.New(err.Error() + " " + address)
 			}
 			readers = append(readers, rdr)
 		case "disco":

@@ -64,13 +64,16 @@ func (worker *DiscoWorker) Run() {
 	if w.task.Stage == "map" {
 		w.runMapStage(pwd, "map_out_")
 	} else if w.task.Stage == "map_shuffle" {
-		w.outputs = make([]*Output, len(w.inputs))
-		for i, input := range w.inputs {
-			w.outputs[i] = new(Output)
-			w.outputs[i].output_location = input.replica_location
-			w.outputs[i].label = input.label
-			w.outputs[i].output_size = 0 // TODO find a way to calculate the size
-		}
+		w.runMapShuffleStage(pwd, "map_shuffle_")
+		/*
+			w.outputs = make([]*Output, len(w.inputs))
+			for i, input := range w.inputs {
+				w.outputs[i] = new(Output)
+				w.outputs[i].output_location = input.replica_location
+				w.outputs[i].label = input.label
+				w.outputs[i].output_size = 0 // TODO find a way to calculate the size
+			}
+		*/
 	} else if w.task.Stage == "reduce_shuffle" {
 		w.runReduceShuffleStage(pwd, "reduce_shuffle_")
 	} else {
@@ -90,6 +93,38 @@ func (worker *DiscoWorker) Run() {
 
 	send_output(w.outputs)
 	request_done()
+}
+
+func (w *Worker) runMapShuffleStage(pwd string, prefix string) {
+	outputs := make(map[int]*os.File)
+	var err error
+
+	for _, input := range w.inputs {
+		_, ok := outputs[input.label]
+		if !ok {
+			outputs[input.label], err = ioutil.TempFile(pwd, prefix)
+			Check(err)
+			defer outputs[input.label].Close()
+		}
+		readCloser := jobutil.AddressReader([]string{input.replica_location}, jobutil.Setting("DISCO_DATA"))
+		io.Copy(outputs[input.label], readCloser)
+		readCloser.Close()
+	}
+
+	w.outputs = make([]*Output, len(outputs))
+	absDiscoPath, err := filepath.EvalSymlinks(w.task.Disco_data)
+	Check(err)
+	i := 0
+	for label, output := range outputs {
+		fileinfo, err := output.Stat()
+		Check(err)
+		w.outputs[i] = new(Output)
+		w.outputs[i].output_location =
+			"disco://" + jobutil.Setting("HOST") + "/disco/" + output.Name()[len(absDiscoPath)+1:]
+		w.outputs[i].output_size = fileinfo.Size()
+		w.outputs[i].label = label
+		i++
+	}
 }
 
 type Worker struct {
