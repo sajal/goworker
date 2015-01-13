@@ -12,6 +12,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 //Go style interface . mostly ripped out of github.com/discoproject/goworker/worker
@@ -204,6 +205,20 @@ func request_input() []*Input {
 	return process_input(line)
 }
 
+func tempgc(path string, suffix string){
+	files, err := ioutil.ReadDir(path)
+	if err != nil {
+		return
+	}
+	for _, fi := range files {
+		if !fi.IsDir() {
+			if strings.Contains(fi.Name(), suffix) {
+				os.Remove(fi.Name())
+			}
+		}
+	}
+}
+
 func process_input(jsonInput []byte) []*Input {
 	var mj []interface{}
 
@@ -353,6 +368,9 @@ func (w *Worker) runMapStage(pwd string, prefix string) {
 }
 
 func (w *Worker) runReduceShuffleStage(pwd string, prefix string) {
+	tempgc(pwd, "map_shuffle_")
+	tempgc(pwd, "map_out_")
+	tempgc(pwd, "sorted_inputs_")
 	output, err := ioutil.TempFile(pwd, prefix)
 	output_name := output.Name()
 	Check(err)
